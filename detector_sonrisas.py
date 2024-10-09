@@ -1,32 +1,38 @@
-import cv2
-import speech_recognition as sr
 import time
 import threading
 import tkinter as tk
 from tkinter import messagebox
+import cv2
+import speech_recognition as sr
+
 
 # Inicializa el reconocimiento de voz
 recognizer = sr.Recognizer()
 command_received = False  # Bandera para saber si se ha recibido un comando
-stop_listening = None  # Controla la escucha continua
 
 # Función para escuchar el comando de voz
-def escuchar_comando(label_status):
+def escuchar_comando():
+    """
+    Escucha comandos de voz 
+    y los procesa utilizando la biblioteca speech_recognition.
+    Utiliza la variable global command_received 
+    para indicar si se ha recibido un comando.
+    """
     global command_received
+
     with sr.Microphone() as source:
-        label_status.config(text="Di 'foto' para capturar la imagen...")  # Actualiza el mensaje en la interfaz
+        print("Di 'foto' para capturar la imagen")
+        audio = recognizer.listen(source)
+
         try:
-            audio = recognizer.listen(source)
             comando = recognizer.recognize_google(audio, language="es-ES")
+            print(f"Escuché: {comando}")
             if "foto" in comando.lower():
-                label_status.config(text="¡Comando 'foto' detectado! Procesando...")  # Actualiza el mensaje en la interfaz
                 command_received = True  # Se ha recibido un comando
-            else:
-                label_status.config(text="Comando no reconocido. Inténtalo de nuevo.")
         except sr.UnknownValueError:
-            label_status.config(text="No entendí el comando. Inténtalo de nuevo.")
+            print("No entendí el comando.")
         except sr.RequestError as e:
-            label_status.config(text=f"Error de solicitud; {e}")
+            print(f"No se pudo solicitar resultados; {e}")
 
 # Carga el clasificador para detección de sonrisas
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
@@ -39,20 +45,44 @@ cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
 # Función para capturar selfie
 def tomar_selfie(frame):
+    """
+    Toma una selfie utilizando el frame actual
+    y la guarda en un archivo con un nombre único basado en la fecha y hora actuales.
+    Parámetros:
+    frame: El frame actual de la webcam que se utilizará para tomar la selfie.
+    """
     timestamp = time.strftime("%Y%m%d-%H%M%S")
     filename = f"selfie_{timestamp}.jpg"
     cv2.imwrite(filename, frame)
+    print(f"Selfie guardada como {filename}")
     messagebox.showinfo("Selfie Tomada", f"Selfie guardada como {filename}")
 
-# Función para iniciar el reconocimiento de voz en segundo plano
-def iniciar_escucha(label_status):
-    def reconocimiento_continuo():
-        while True:
-            escuchar_comando(label_status)
-    threading.Thread(target=reconocimiento_continuo, daemon=True).start()
+# Hilo para escuchar el comando de voz
+def comando_de_voz():
+    """
+    Bucle infinito que escucha comandos de voz
+     y los procesa utilizando la función escuchar_comando.
+    """
+    while True:
+        escuchar_comando()
+
+# Función para iniciar el video y el reconocimiento de voz
+def iniciar():
+    """
+    Inicia el reconocimiento de voz y el bucle principal del programa 
+    que detecta caras y sonrisas en la webcam y toma selfies cuando se detecta una sonrisa 
+    y se ha recibido un comando de voz.
+    """
+    threading.Thread(target=comando_de_voz, daemon=True).start()
+    main_loop()
 
 # Bucle principal para la captura de video
-def main_loop(label_status):
+def main_loop():
+    """
+    Bucle principal del programa 
+    que detecta caras y sonrisas en la webcam y toma
+    selfies cuando se detecta una sonrisa y se ha recibido un comando de voz. 
+    """
     global command_received
     while True:
         ret, frame = cap.read()
@@ -76,7 +106,6 @@ def main_loop(label_status):
         # Solo toma la selfie si se ha detectado una sonrisa y se ha recibido un comando
         if smile_detected and command_received:
             tomar_selfie(frame)  # Toma la selfie
-            label_status.config(text="¡Sonrisa detectada! Capturando selfie...")  # Actualiza el mensaje
             command_received = False  # Reinicia la bandera de comando
 
         cv2.imshow('Detector de Sonrisas', frame)
@@ -90,18 +119,12 @@ def main_loop(label_status):
 root = tk.Tk()
 root.title("Detector de Sonrisas")
 
-# Etiqueta para mostrar mensajes al usuario
-label_status = tk.Label(root, text="Presiona 'Iniciar Reconocimiento' para comenzar", font=("Arial", 14))
-label_status.pack(pady=20)
-
 # Crear un botón para iniciar el sistema
-iniciar_button = tk.Button(root, text="Iniciar Reconocimiento", command=lambda: iniciar_escucha(label_status))
+iniciar_button = tk.Button(
+    root,
+    text="Presiona 'Iniciar Reconocimiento' para comenzar",
+    command=iniciar)
 iniciar_button.pack(pady=20)
 
-# Bucle para actualizar continuamente el video
-def actualizar_video():
-    main_loop(label_status)
-
 # Iniciar el bucle de la interfaz gráfica
-root.after(10, actualizar_video)
 root.mainloop()
